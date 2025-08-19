@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 import useCurrentUser from '../../lib/useCurrentUser';
+import LoadingOverlay from '../../components/LoadingOverlay';
 
 export default function HomePage() {
   const router = useRouter();
@@ -232,6 +233,7 @@ export default function HomePage() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '2rem auto', padding: 20 }}>
+  <LoadingOverlay show={authLoading || loadingSolicitudes} text="Cargando datos..." />
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
           <h2>Bienvenido{userName ? `, ${userName}` : ''}</h2>
