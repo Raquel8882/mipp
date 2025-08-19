@@ -5,11 +5,17 @@ export async function POST(req) {
   // any authenticated user can create a solicitud
   const user = await requireRole(req, 'normal_user');
   if (user instanceof Response) {
-    // if not normal_user, maybe they are other roles too; allow any authenticated user
-    const maybeAny = await requireRole(req, 'dev');
-    if (maybeAny instanceof Response) {
-      const maybeAny2 = await requireRole(req, 'admin');
-      if (maybeAny2 instanceof Response) return new Response(JSON.stringify({ error: 'No autenticado' }), { status: 401 });
+    // allow any authenticated user: dev or admin
+    const dev = await requireRole(req, 'dev');
+    if (dev instanceof Response) {
+      const admin = await requireRole(req, 'admin');
+      if (admin instanceof Response) {
+        // Return a consistent 401 with a hint header so client can redirect to /login
+        return new Response(
+          JSON.stringify({ error: 'No autenticado', hint: 'Inicia sesión para continuar' }),
+          { status: 401, headers: { 'WWW-Authenticate': 'Bearer realm="session_token"' } }
+        );
+      }
     }
   }
 
@@ -20,19 +26,25 @@ export async function POST(req) {
     for (const f of required) if (!body[f]) return new Response(JSON.stringify({ error: `Campo requerido: ${f}` }), { status: 400 });
 
     // attach user from session
-    const cookie = req.cookies.get('session_token');
-    const token = cookie?.value || cookie;
+  const cookie = req.cookies.get('session_token');
+  const token = cookie?.value || cookie;
     // payload validation already done in requireRole but we'll fetch user id from authHelpers again
   const { getUserAndRolesFromRequest } = await import('../../../lib/authHelpers');
     const info = await getUserAndRolesFromRequest(req);
-    if (!info) return new Response(JSON.stringify({ error: 'No autenticado' }), { status: 401 });
+    if (!info) {
+      return new Response(
+        JSON.stringify({ error: 'No autenticado', hint: 'Vuelve a iniciar sesión' }),
+        { status: 401, headers: { 'WWW-Authenticate': 'Bearer realm="session_token"' } }
+      );
+    }
 
     const payload = {
       user_cedula: info.user.cedula,
       nombre_solicitante: body.nombre_solicitante || null,
       posicion: body.posicion || null,
       instancia: body.instancia || null,
-  tipo_general: body.tipo_general || null,
+      estado: 'pendiente',
+      tipo_general: body.tipo_general || null,
       tipo_solicitud: body.tipo_solicitud,
       familiar: body.familiar || null,
       es_rango: !!body.es_rango,

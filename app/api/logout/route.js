@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { verifyToken } from '../../../lib/session';
+import { buildSessionClearCookie } from '../../../lib/cookies';
 
 export async function POST(req) {
   const headers = new Headers();
@@ -19,6 +20,6 @@ export async function POST(req) {
   }
 
   // Expirar la cookie de sesión firmada
-  headers.append('Set-Cookie', `session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`);
+  headers.append('Set-Cookie', buildSessionClearCookie());
   return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
 }

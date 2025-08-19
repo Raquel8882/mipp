@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { createToken } from '../../../lib/session';
+import { buildSessionCookie } from '../../../lib/cookies';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 
 export async function POST(req) {
@@ -59,10 +60,9 @@ export async function POST(req) {
 
       const sessionId = sessionData.id;
       // Autenticación exitosa: crear token firmado con user_id y session_id
-      const token = createToken({ user_id: user.id, session_id: sessionId }, 60 * 60 * 24 * 7);
+  const token = createToken({ user_id: user.id, session_id: sessionId }, 60 * 60 * 24 * 7);
   const headers = new Headers();
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  headers.append('Set-Cookie', `session_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}${secure}`);
+  headers.append('Set-Cookie', buildSessionCookie(token, 60 * 60 * 24 * 7));
       return new Response(
         JSON.stringify({ ok: true, must_change_password: !!user.must_change_password, cedula }),
         { status: 200, headers }

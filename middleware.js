@@ -15,7 +15,7 @@ export function middleware(req) {
   const { pathname } = req.nextUrl;
 
   // permitir archivos estáticos y rutas públicas
-  if (pathname.startsWith('/_next') || (pathname.startsWith('/api') && PUBLIC_PATHS.includes(pathname)) || PUBLIC_PATHS.some(p => pathname === p) || pathname.startsWith('/public') || pathname.includes('.')) {
+  if (pathname.startsWith('/_next') || pathname.startsWith('/api') || PUBLIC_PATHS.some(p => pathname === p) || pathname.startsWith('/public') || pathname.includes('.')) {
     return NextResponse.next();
   }
 
