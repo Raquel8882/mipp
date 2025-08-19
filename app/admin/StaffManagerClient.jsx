@@ -54,9 +54,35 @@ export default function StaffManagerClient({ initialUsers = [], initialTotal = 0
     setCreating(true)
     setError(null)
     try{
-      const res = await fetch('/api/admin/staff', { method: 'POST', headers: { 'content-type':'application/json' }, body: JSON.stringify(newUser) })
-      const payload = await res.json()
-      if(!res.ok) throw new Error(payload.error || payload.detail || 'Create failed')
+      // client-side validation
+      const collapseSpaces = (s) => (s ?? '').toString().replace(/\s+/g, ' ').trim()
+      const onlyDigits = /^\d+$/
+      const lettersAndSpaces = /^[A-Za-zÁÉÍÓÚáéíóúÑñ ]+$/
+  const bodyPayload = {
+        cedula: collapseSpaces(newUser.cedula),
+        nombre: collapseSpaces(newUser.nombre),
+        segundo_nombre: newUser.segundo_nombre ? collapseSpaces(newUser.segundo_nombre) : null,
+        primer_apellido: collapseSpaces(newUser.primer_apellido),
+        segundo_apellido: collapseSpaces(newUser.segundo_apellido),
+        posicion: collapseSpaces(newUser.posicion),
+        categoria: collapseSpaces(newUser.categoria),
+        instancia: collapseSpaces(newUser.instancia),
+      }
+  if(!onlyDigits.test(bodyPayload.cedula)) throw new Error('La cédula debe contener solo dígitos')
+      const check = (label, v, { allowNull=false }={}) => {
+        if(allowNull && (v == null)) return
+        if(!v) throw new Error(`${label} es obligatorio`)
+        if(!lettersAndSpaces.test(v)) throw new Error(`${label} solo permite letras y espacios`)
+      }
+  check('Nombre', bodyPayload.nombre)
+  check('Primer apellido', bodyPayload.primer_apellido)
+  check('Segundo apellido', bodyPayload.segundo_apellido)
+  check('Posición', bodyPayload.posicion)
+  check('Segundo nombre', bodyPayload.segundo_nombre, { allowNull: true })
+
+  const res = await fetch('/api/admin/staff', { method: 'POST', headers: { 'content-type':'application/json' }, body: JSON.stringify(bodyPayload) })
+  const resp = await res.json()
+  if(!res.ok) throw new Error(resp.error || resp.detail || 'Create failed')
   // reload first page
   setNewUser({
     cedula: '',
@@ -212,12 +238,30 @@ export default function StaffManagerClient({ initialUsers = [], initialTotal = 0
     <h3>Crear usuario</h3>
       <form onSubmit={handleCreate}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-          <input placeholder="Cédula" value={newUser.cedula} onChange={e=>setNewUser({...newUser, cedula: e.target.value})} required />
-          <input placeholder="Nombre" value={newUser.nombre} onChange={e=>setNewUser({...newUser, nombre: e.target.value})} required />
-          <input placeholder="Segundo nombre (opcional)" value={newUser.segundo_nombre} onChange={e=>setNewUser({...newUser, segundo_nombre: e.target.value})} />
-          <input placeholder="Primer apellido" value={newUser.primer_apellido} onChange={e=>setNewUser({...newUser, primer_apellido: e.target.value})} required />
-          <input placeholder="Segundo apellido" value={newUser.segundo_apellido} onChange={e=>setNewUser({...newUser, segundo_apellido: e.target.value})} required />
-          <input placeholder="Posición" value={newUser.posicion} onChange={e=>setNewUser({...newUser, posicion: e.target.value})} required />
+          <input placeholder="Cédula" inputMode="numeric" pattern="[0-9]*" value={newUser.cedula} onChange={e=>{
+            const v = e.target.value.replace(/[^0-9]/g, '')
+            setNewUser({...newUser, cedula: v})
+          }} required />
+          <input placeholder="Nombre" value={newUser.nombre} onChange={e=>{
+            const v = e.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñ ]/g, '')
+            setNewUser({...newUser, nombre: v})
+          }} onBlur={e=>setNewUser(s=>({...s, nombre: e.target.value.replace(/\s+/g,' ').trim()}))} required />
+          <input placeholder="Segundo nombre (opcional)" value={newUser.segundo_nombre} onChange={e=>{
+            const v = e.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñ ]/g, '')
+            setNewUser({...newUser, segundo_nombre: v})
+          }} onBlur={e=>setNewUser(s=>({...s, segundo_nombre: e.target.value.replace(/\s+/g,' ').trim()}))} />
+          <input placeholder="Primer apellido" value={newUser.primer_apellido} onChange={e=>{
+            const v = e.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñ ]/g, '')
+            setNewUser({...newUser, primer_apellido: v})
+          }} onBlur={e=>setNewUser(s=>({...s, primer_apellido: e.target.value.replace(/\s+/g,' ').trim()}))} required />
+          <input placeholder="Segundo apellido" value={newUser.segundo_apellido} onChange={e=>{
+            const v = e.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñ ]/g, '')
+            setNewUser({...newUser, segundo_apellido: v})
+          }} onBlur={e=>setNewUser(s=>({...s, segundo_apellido: e.target.value.replace(/\s+/g,' ').trim()}))} required />
+          <input placeholder="Posición" value={newUser.posicion} onChange={e=>{
+            const v = e.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñ ]/g, '')
+            setNewUser({...newUser, posicion: v})
+          }} onBlur={e=>setNewUser(s=>({...s, posicion: e.target.value.replace(/\s+/g,' ').trim()}))} required />
           <select value={newUser.categoria} onChange={e=>setNewUser({...newUser, categoria: e.target.value})}>
             <option value="Titulo I">Titulo I</option>
             <option value="Titulo II">Titulo II</option>
@@ -242,8 +286,10 @@ function InlineEdit({ value, onSave }){
   useEffect(()=>{ setV(value || '') }, [value])
   return editing ? (
     <span>
-      <input value={v} onChange={e=>setV(e.target.value)} />
-      <button onClick={()=>{ setEditing(false); onSave(v) }} style={{ marginLeft: 6 }}>Guardar</button>
+      <input value={v} onChange={e=>{
+        setV(e.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñ ]/g, ''))
+      }} onBlur={e=>setV(e.target.value.replace(/\s+/g,' ').trim())} />
+  <button onClick={()=>{ const vv = (v||'').trim(); if(!vv){ alert('El valor no puede estar vacío'); return; } setEditing(false); onSave(vv) }} style={{ marginLeft: 6 }}>Guardar</button>
       <button onClick={()=>{ setEditing(false); setV(value) }} style={{ marginLeft: 6 }}>Cancelar</button>
     </span>
   ) : (

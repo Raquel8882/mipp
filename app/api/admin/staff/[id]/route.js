@@ -30,14 +30,39 @@ export async function PUT(req, { params }){
   if(!nombre && !segundo_nombre && !primer_apellido && !segundo_apellido && !posicion && !categoria && !instancia && typeof must_change_password === 'undefined') {
     return NextResponse.json({ error: 'Nada para actualizar' }, { status: 400 })
   }
+    // sanitize and validate like POST for textual fields
+    const collapseSpaces = (s) => (s ?? '').toString().replace(/\s+/g, ' ').trim()
+    const lettersAndSpaces = /^[A-Za-zÁÉÍÓÚáéíóúÑñ ]+$/
+
     const payload = {}
-  if(typeof nombre !== 'undefined') payload.nombre = nombre
-  if(typeof segundo_nombre !== 'undefined') payload.segundo_nombre = segundo_nombre
-  if(typeof primer_apellido !== 'undefined') payload.primer_apellido = primer_apellido
-  if(typeof segundo_apellido !== 'undefined') payload.segundo_apellido = segundo_apellido
-  if(typeof posicion !== 'undefined') payload.posicion = posicion
-  if(typeof categoria !== 'undefined') payload.categoria = categoria
-  if(typeof instancia !== 'undefined') payload.instancia = instancia
+  if(typeof nombre !== 'undefined') {
+      const val = collapseSpaces(nombre)
+      if(!val || !lettersAndSpaces.test(val)) return NextResponse.json({ error: 'Nombre inválido' }, { status: 400 })
+      payload.nombre = val
+    }
+  if(typeof segundo_nombre !== 'undefined') {
+      const valRaw = segundo_nombre == null ? null : collapseSpaces(segundo_nombre)
+      const val = (valRaw === '') ? null : valRaw
+      if(val != null && !lettersAndSpaces.test(val)) return NextResponse.json({ error: 'Segundo nombre inválido' }, { status: 400 })
+      payload.segundo_nombre = val
+    }
+  if(typeof primer_apellido !== 'undefined') {
+      const val = collapseSpaces(primer_apellido)
+      if(!val || !lettersAndSpaces.test(val)) return NextResponse.json({ error: 'Primer apellido inválido' }, { status: 400 })
+      payload.primer_apellido = val
+    }
+  if(typeof segundo_apellido !== 'undefined') {
+      const val = collapseSpaces(segundo_apellido)
+      if(!val || !lettersAndSpaces.test(val)) return NextResponse.json({ error: 'Segundo apellido inválido' }, { status: 400 })
+      payload.segundo_apellido = val
+    }
+  if(typeof posicion !== 'undefined') {
+      const val = collapseSpaces(posicion)
+      if(!val || !lettersAndSpaces.test(val)) return NextResponse.json({ error: 'Posición inválida' }, { status: 400 })
+      payload.posicion = val
+    }
+  if(typeof categoria !== 'undefined') payload.categoria = collapseSpaces(categoria)
+  if(typeof instancia !== 'undefined') payload.instancia = collapseSpaces(instancia)
   if(typeof must_change_password !== 'undefined') payload.must_change_password = !!must_change_password
     const { data, error } = await supabaseAdmin.from('users').update(payload).eq('id', id).select('id').single()
     if(error) return NextResponse.json({ error: error.message }, { status: 500 })

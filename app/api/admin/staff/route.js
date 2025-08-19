@@ -118,9 +118,45 @@ export async function POST(req){
       if(!body?.[f]) return NextResponse.json({ error: `${f} es obligatorio` }, { status: 400 })
     }
 
+    // Sanitización y validación de formato
+    const collapseSpaces = (s) => (s ?? '').toString().replace(/\s+/g, ' ').trim()
+    const onlyDigits = /^\d+$/
+    // Letras (incluye acentos) y espacios
+    const lettersAndSpaces = /^[A-Za-zÁÉÍÓÚáéíóúÑñ ]+$/
+
+    const cedulaSan = collapseSpaces(cedula)
+    const nombreSan = collapseSpaces(nombre)
+    const segNombreSanRaw = segundo_nombre == null ? null : collapseSpaces(segundo_nombre)
+    const segNombreSan = segNombreSanRaw === '' ? null : segNombreSanRaw
+    const primerApeSan = collapseSpaces(primer_apellido)
+    const segundoApeSan = collapseSpaces(segundo_apellido)
+    const posicionSan = collapseSpaces(posicion)
+    const categoriaSan = collapseSpaces(categoria)
+    const instanciaSan = collapseSpaces(instancia)
+
+    if(!onlyDigits.test(cedulaSan)){
+      return NextResponse.json({ error: 'La cédula debe contener solo dígitos' }, { status: 400 })
+    }
+    const checkName = (label, val, { allowNull=false }={}) => {
+      if(allowNull && (val == null)) return null
+      if(!val) return `${label} es obligatorio`
+      if(!lettersAndSpaces.test(val)) return `${label} solo permite letras y espacios`
+      return null
+    }
+    const errs = [
+      checkName('Nombre', nombreSan),
+      checkName('Primer apellido', primerApeSan),
+      checkName('Segundo apellido', segundoApeSan),
+      checkName('Posición', posicionSan),
+      checkName('Segundo nombre', segNombreSan, { allowNull: true }),
+    ].filter(Boolean)
+    if(errs.length){
+      return NextResponse.json({ error: errs[0] }, { status: 400 })
+    }
+
     // Unicidad de cédula
     const { data: exists, error: selErr } = await supabaseAdmin
-      .from('users').select('id').eq('cedula', cedula).limit(1)
+      .from('users').select('id').eq('cedula', cedulaSan).limit(1)
     if(selErr) return NextResponse.json({ error: selErr.message }, { status: 500 })
     if(exists && exists.length) return NextResponse.json({ error: 'Cédula ya registrada' }, { status: 409 })
 
@@ -129,14 +165,14 @@ export async function POST(req){
     const hash = await bcrypt.hash(defaultPassword, 10)
 
     const insertPayload = {
-      cedula,
-      nombre,
-      segundo_nombre,
-      primer_apellido,
-      segundo_apellido,
-      posicion,
-      categoria,
-      instancia,
+      cedula: cedulaSan,
+      nombre: nombreSan,
+      segundo_nombre: segNombreSan,
+      primer_apellido: primerApeSan,
+      segundo_apellido: segundoApeSan,
+      posicion: posicionSan,
+      categoria: categoriaSan,
+      instancia: instanciaSan,
       password_hash: hash,
       must_change_password: true,
     }
