@@ -43,6 +43,11 @@ export default function ReporteInfraDetalle() {
     fetchData();
   }, [id]);
 
+  const isResolved = React.useMemo(() => {
+    const s = row?.estado ? String(row.estado).toLowerCase() : '';
+    return s && !s.includes('pend');
+  }, [row]);
+
   return (
     <div style={{ maxWidth: 800, margin: '2rem auto', padding: 24 }}>
       <nav style={{ marginBottom: 12 }}>
@@ -57,7 +62,7 @@ export default function ReporteInfraDetalle() {
         <>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <h2 style={{ margin:0 }}>Detalle de reporte de infraestructura</h2>
-            {isAdmin && (
+            {isAdmin && !isResolved && (
               <Link href={`/reporteinf/${id}/responder`} style={{ color:'#2563eb' }}>Ir a Responder →</Link>
             )}
           </div>

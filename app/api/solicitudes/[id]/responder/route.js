@@ -12,6 +12,18 @@ export async function POST(req, { params }){
     const body = await req.json();
     const { decision, comentario } = body || {};
 
+    // Prevent responding if already resolved
+    const { data: existingRows, error: fetchErr } = await supabaseAdmin
+      .from('solicitudes_permiso')
+      .select('estado')
+      .eq('id', id)
+      .limit(1);
+    if (fetchErr) throw fetchErr;
+    const currentEstado = existingRows?.[0]?.estado || '';
+    if (currentEstado && !String(currentEstado).toLowerCase().includes('pend')) {
+      return new Response(JSON.stringify({ error: 'La solicitud ya está resuelta y no puede modificarse.' }), { status: 409 });
+    }
+
     const map = {
       'Aceptar lo solicitado': 'Aceptado',
       'Denegar lo solicitado': 'Denegado',

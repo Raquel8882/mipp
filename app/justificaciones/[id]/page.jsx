@@ -57,6 +57,10 @@ export default function JustificacionDetalle() {
   }, [id]);
 
   const tipo = useMemo(() => row?.tipo_justificacion || 'Justificación', [row]);
+  const isResolved = useMemo(() => {
+    const s = row?.estado ? String(row.estado).toLowerCase() : '';
+    return s && !s.includes('pend');
+  }, [row]);
 
   return (
     <div style={{ maxWidth: 800, margin: '2rem auto', padding: 24 }}>
@@ -72,7 +76,7 @@ export default function JustificacionDetalle() {
         <>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <h2 style={{ margin:0 }}>Detalle de justificación</h2>
-            {isAdmin && (
+            {isAdmin && !isResolved && (
               <Link href={`/justificaciones/${id}/responder`} style={{ color:'#2563eb' }}>Ir a Responder →</Link>
             )}
           </div>

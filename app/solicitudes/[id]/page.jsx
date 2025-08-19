@@ -58,6 +58,10 @@ export default function SolicitudDetalle() {
   }, [id]);
 
   const nombreTipo = useMemo(() => row?.tipo_solicitud || 'Solicitud', [row]);
+  const isResolved = useMemo(() => {
+    const s = row?.estado ? String(row.estado).toLowerCase() : '';
+    return s && !s.includes('pend');
+  }, [row]);
 
   return (
     <div style={{ maxWidth: 800, margin: '2rem auto', padding: 24 }}>
@@ -78,7 +82,7 @@ export default function SolicitudDetalle() {
             </a>
           </div>
 
-          {isAdmin && (
+          {isAdmin && !isResolved && (
             <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', padding:12, borderRadius:6, marginTop:12 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
