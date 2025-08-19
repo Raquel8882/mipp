@@ -3,8 +3,6 @@ import { NextResponse } from 'next/server';
 // Rutas públicas que no requieren autenticación
 const PUBLIC_PATHS = [
   '/login',
-  '/register',
-  '/api/register',
   '/api/login',
   '/api/change-password',
   '/favicon.ico',

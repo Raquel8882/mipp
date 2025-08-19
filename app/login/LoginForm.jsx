@@ -47,7 +47,6 @@ export default function LoginForm() {
       </label>
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         <button disabled={loading} type="submit">{loading ? 'Entrando...' : 'Entrar'}</button>
-        <button type="button" onClick={() => router.push('/register')}>Ir a registro</button>
       </div>
     </form>
   );
