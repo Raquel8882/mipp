@@ -96,7 +96,11 @@ export default function SolicitudPermiso() {
   };
 
   const toggleFechaModo = () => setForm((p) => ({ ...p, esRango: !p.esRango }));
-  const toggleJornada = () => setForm((p) => ({ ...p, jornada: p.jornada === "Media" ? "Completa" : "Media" }));
+  const toggleJornada = () => setForm((p) => ({
+    ...p,
+    jornada: p.jornada === "Media" ? "Completa" : "Media",
+    horaSalida: p.jornada === "Media" ? "" : p.horaSalida,
+  }));
 
   // Reglas anti-errores y helpers
   const validate = () => {
@@ -207,8 +211,8 @@ export default function SolicitudPermiso() {
       hora_compact: horaValue,
       cantidad: form.cantidad ? Number(form.cantidad) : null,
       unidad: form.cantidad ? (form.unidad === 'lecciones' ? 'lecciones' : 'horas') : null,
-      observaciones: form.observaciones || null,
-      hora_salida: form.horaSalida || null,
+  observaciones: form.observaciones || null,
+  hora_salida: form.jornada === 'Media' ? (form.horaSalida || null) : null,
       adjunto_url,
       adjunto_mime,
       adjunto_path,
@@ -379,9 +383,11 @@ export default function SolicitudPermiso() {
           <label style={{ flex:1 }}>Observaciones
             <textarea name="observaciones" value={form.observaciones} onChange={handleChange} rows={3} style={{ width:'100%' }} placeholder="Opcional" />
           </label>
-          <label title="Hora de salida del centro educativo">Hora de salida
-            <input type="time" name="horaSalida" value={form.horaSalida} onChange={handleChange} style={{ display:'block' }} />
-          </label>
+          {form.jornada === 'Media' && (
+            <label title="Hora de salida del centro educativo">Hora de salida
+              <input type="time" name="horaSalida" value={form.horaSalida} onChange={handleChange} style={{ display:'block' }} />
+            </label>
+          )}
         </div>
 
         {/* Texto de presentación */}

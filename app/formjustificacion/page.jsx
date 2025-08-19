@@ -104,7 +104,11 @@ export default function FormJustificacion() {
   };
 
   const toggleFechaModo = () => setForm((p) => ({ ...p, esRango: !p.esRango }));
-  const toggleJornada = () => setForm((p) => ({ ...p, jornada: p.jornada === 'Media' ? 'Completa' : 'Media' }));
+  const toggleJornada = () => setForm((p) => ({
+    ...p,
+    jornada: p.jornada === 'Media' ? 'Completa' : 'Media',
+    horaSalida: p.jornada === 'Media' ? '' : p.horaSalida,
+  }));
 
   // When selecting a solicitud to justify, autofill fields
   const handleSelectSolicitud = (e) => {
@@ -213,7 +217,7 @@ export default function FormJustificacion() {
       hora_fin: form.jornada === 'Media' ? form.horaFin : null,
       cantidad: form.cantidad ? Number(form.cantidad) : null,
       unidad: form.cantidad ? (form.unidad === 'lecciones' ? 'lecciones' : 'horas') : null,
-      hora_salida: form.horaSalida || null,
+  hora_salida: form.jornada === 'Media' ? (form.horaSalida || null) : null,
       justificacion_fecha: form.justFecha,
       justificacion_hora: form.justHora,
       observaciones: form.observaciones || null,
@@ -336,11 +340,13 @@ export default function FormJustificacion() {
               </div>
             </>
           )}
-          <div>
-            <label>Hora de salida
-              <input type="time" name="horaSalida" value={form.horaSalida} onChange={handleChange} style={{ display:'block' }} />
-            </label>
-          </div>
+          {form.jornada === 'Media' && (
+            <div>
+              <label>Hora de salida
+                <input type="time" name="horaSalida" value={form.horaSalida} onChange={handleChange} style={{ display:'block' }} />
+              </label>
+            </div>
+          )}
         </div>
 
         {/* Cantidad */}
