@@ -231,9 +231,18 @@ export default function HomePage() {
     router.push('/login');
   };
 
+  const globalLoading = authLoading || loadingSolicitudes || (!showAll && (!cedula || authLoading));
+
+  if (globalLoading) {
+    return (
+      <div style={{ minHeight: '100vh' }}>
+        <LoadingOverlay show={true} text="Cargando datos..." />
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: 1000, margin: '2rem auto', padding: 20 }}>
-  <LoadingOverlay show={authLoading || loadingSolicitudes} text="Cargando datos..." />
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
           <h2>Bienvenido{userName ? `, ${userName}` : ''}</h2>
@@ -306,7 +315,7 @@ export default function HomePage() {
       </section>
 
       <main>
-        {(loadingSolicitudes || (!showAll && (!cedula || authLoading))) ? <p>Cargando solicitudes...</p> : (
+        {false ? <p /> : (
           isAdminOrViewer ? (
             viewerPersonal && isViewer ? (
               <div style={{ display: 'grid', gap: 12 }}>
