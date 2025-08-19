@@ -43,7 +43,7 @@ export async function POST(req) {
       nombre_solicitante: body.nombre_solicitante || null,
       posicion: body.posicion || null,
       instancia: body.instancia || null,
-      estado: 'pendiente',
+      estado: 'Pendiente',
       tipo_general: body.tipo_general || null,
       tipo_solicitud: body.tipo_solicitud,
       familiar: body.familiar || null,
