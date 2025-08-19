@@ -1,6 +1,7 @@
 "use client"
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import LoadingOverlay from '../../components/LoadingOverlay'
 
 export default function StaffManagerClient({ initialUsers = [], initialTotal = 0, initialPage = 1, initialPageSize = 12, initialSearch = '' }){
   const router = useRouter()
@@ -154,6 +155,7 @@ export default function StaffManagerClient({ initialUsers = [], initialTotal = 0
 
   return (
     <div>
+  <LoadingOverlay show={loading || creating} text={creating ? 'Creando usuario...' : 'Cargando datos...'} />
       <div style={{ marginBottom: 12 }}>
         <input placeholder="Buscar por cédula o nombre" value={search} onChange={e=>setSearch(e.target.value)} style={{ padding: 8, width: 300 }} />
         <button onClick={()=>fetchPage(1, search)} style={{ marginLeft: 8, padding: '8px 12px' }}>Buscar</button>

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 import useCurrentUser from '../../lib/useCurrentUser';
+import LoadingOverlay from '../../components/LoadingOverlay';
 
 export default function GestionarSolicitudesPage(){
   const router = useRouter();
@@ -43,6 +44,7 @@ export default function GestionarSolicitudesPage(){
 
   return (
     <div style={{ maxWidth: 1000, margin: '2rem auto', padding: 24 }}>
+  <LoadingOverlay show={authLoading || loading} text="Cargando datos..." />
       <nav style={{ marginBottom: 12 }}>
         <Link href="/home">← Volver</Link>
       </nav>

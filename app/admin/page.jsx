@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { requireAnyRole } from '../../lib/authHelpers'
 import { supabaseAdmin } from '../../lib/supabaseAdmin'
 import StaffManagerClient from './StaffManagerClient'
+import LoadingOverlay from '../../components/LoadingOverlay'
 
 export default async function AdminPage({ searchParams }){
   // server-side role check: only staff_manager or admin
@@ -44,6 +45,7 @@ export default async function AdminPage({ searchParams }){
 
   return (
     <div style={{ padding: 20 }}>
+  {/* The client will also display its own internal loading overlay during fetches */}
       <h1>Administrar personal</h1>
       <p>Ver y administrar usuarios registrados (cédula, nombres, apellidos)</p>
       <StaffManagerClient initialUsers={users} initialTotal={total} initialPage={page} initialPageSize={pageSize} initialSearch={search} />
