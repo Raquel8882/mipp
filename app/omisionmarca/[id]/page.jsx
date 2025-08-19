@@ -1,0 +1,107 @@
+"use client";
+
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { supabase } from '../../../lib/supabaseClient';
+import useCurrentUser from '../../../lib/useCurrentUser';
+
+export default function OmisionMarcaDetalle() {
+  const { id } = useParams();
+  const router = useRouter();
+  const { user: currentUser, roles, loading: authLoading } = useCurrentUser();
+  const isAdmin = Array.isArray(roles) && roles.includes('admin');
+  const [row, setRow] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!authLoading && !currentUser) {
+      router.push('/login');
+      return;
+    }
+  }, [authLoading, currentUser, router]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!id) return;
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('omision_marca')
+          .select('*')
+          .eq('id', id)
+          .limit(1);
+        if (error) throw error;
+        setRow((data && data[0]) || null);
+      } catch (err) {
+        console.error('detalle omisión de marca error', err);
+        setRow(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [id]);
+
+  return (
+    <div style={{ maxWidth: 800, margin: '2rem auto', padding: 24 }}>
+      <nav style={{ marginBottom: 12 }}>
+        <Link href="/home">← Volver al historial</Link>
+      </nav>
+
+      {loading ? (
+        <p>Cargando omisión de marca...</p>
+      ) : !row ? (
+        <p>No se encontró la omisión de marca.</p>
+      ) : (
+        <>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <h2 style={{ margin:0 }}>Detalle de omisión de marca</h2>
+            {isAdmin && (
+              <Link href={`/omisionmarca/${id}/responder`} style={{ color:'#2563eb' }}>Ir a Responder →</Link>
+            )}
+          </div>
+
+          <section style={{ background: '#f7f7f7', padding: 12, borderRadius: 6, marginBottom: 16 }}>
+            <p><strong>Fecha de omisión:</strong> {row.fecha_omision}</p>
+            <p><strong>Tipo:</strong> {row.tipo_omision}</p>
+          </section>
+
+          <section style={{ marginBottom: 16 }}>
+            <h3>Suscriptor</h3>
+            <div style={{ border: '1px solid #eee', padding: 12, borderRadius: 6 }}>
+              <p><strong>Nombre:</strong> {row.nombre_suscriptor || '—'}</p>
+              <p><strong>Cédula:</strong> {row.user_cedula || '—'}</p>
+              <p><strong>Posición:</strong> {row.posicion || '—'}</p>
+              <p><strong>Instancia:</strong> {row.instancia || '—'}</p>
+            </div>
+          </section>
+
+          <section>
+            <h3>Detalle</h3>
+            <div style={{ border: '1px solid #eee', padding: 12, borderRadius: 6 }}>
+              <p><strong>Justificación:</strong> {row.justificacion}</p>
+              <p style={{ color: '#666' }}><strong>Creado:</strong> {row.creado_en || '—'}</p>
+            </div>
+          </section>
+
+          <section style={{ marginTop: 16 }}>
+            <h3>Resolución</h3>
+            {row.estado || row.respuesta_en || row.respuesta_por || row.respuesta_comentario ? (
+              <div style={{ border: '1px solid #eee', padding: 12, borderRadius: 6 }}>
+                <p><strong>Estado:</strong> {row.estado || '—'}</p>
+                <p><strong>Fecha de decisión:</strong> {row.respuesta_en ? new Date(row.respuesta_en).toLocaleString() : '—'}</p>
+                <p><strong>Decidido por:</strong> {row.respuesta_nombre || row.respuesta_por || '—'}</p>
+                {row.respuesta_comentario && (
+                  <p><strong>Comentario:</strong> {row.respuesta_comentario}</p>
+                )}
+              </div>
+            ) : (
+              <p style={{ color:'#777' }}>Sin resolución aún.</p>
+            )}
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
