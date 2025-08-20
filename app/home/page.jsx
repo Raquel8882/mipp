@@ -106,7 +106,7 @@ export default function HomePage() {
         solicitante: r.nombre_solicitante || null,
       }));
 
-      const justs = (justRes.data || []).map(r => ({
+  const justs = (justRes.data || []).map(r => ({
         kind: 'Justificación',
         id: r.id,
         userCedula: r.user_cedula || null,
@@ -118,7 +118,7 @@ export default function HomePage() {
         hora_inicio: r.hora_inicio,
         hora_fin: r.hora_fin,
         observaciones: r.observaciones,
-        estado: r.estado || null,
+  estado: r.estado || 'Pendiente',
         createdAt: r.creado_en || null,
         solicitante: r.nombre_suscriptor || null,
       }));

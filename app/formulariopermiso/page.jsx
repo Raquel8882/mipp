@@ -6,10 +6,74 @@ import { supabase } from "../../lib/supabaseClient";
 import { useRouter } from 'next/navigation';
 import useCurrentUser from '../../lib/useCurrentUser';
 import LoadingOverlay from '../../components/LoadingOverlay';
+import dayjs from 'dayjs';
+import { LocalizationProvider, TimePicker } from '@mui/x-date-pickers';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 
 // Helper de fechas
 const toDate = (s) => (s ? new Date(`${s}T00:00:00`) : null);
 const fmt2 = (n) => String(n).padStart(2, "0");
+// Rango horario permitido
+const TIME_MIN = '07:00';
+const TIME_MAX = '16:30';
+const STEP_MINUTES = 5; // salto mínimo entre horas
+const toMin = (hhmm) => {
+  if (!hhmm) return null;
+  const [h, m] = String(hhmm).split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+};
+const fmtHHMM = (mins) => `${fmt2(Math.floor(mins / 60))}:${fmt2(mins % 60)}`;
+// 12h label helper (for potential aria/labels)
+const fmt12 = (hhmm) => {
+  const [h, m] = String(hhmm).split(':').map(Number);
+  const am = h < 12;
+  const h12 = ((h % 12) || 12);
+  return `${h12}:${fmt2(m)} ${am ? 'AM' : 'PM'}`;
+};
+const clampTime = (hhmm) => {
+  const v = toMin(hhmm);
+  if (v == null) return TIME_MIN;
+  return fmtHHMM(Math.min(Math.max(v, toMin(TIME_MIN)), toMin(TIME_MAX)));
+};
+const addMin = (hhmm, delta) => fmtHHMM(Math.min(Math.max(toMin(hhmm) + delta, toMin(TIME_MIN)), toMin(TIME_MAX)));
+const normalizeTimes = (start, end) => {
+  let s = clampTime(start);
+  let e = clampTime(end);
+  const sMin = toMin(s);
+  let eMin = toMin(e);
+  if (eMin <= sMin) {
+    // forzar fin a ser posterior al inicio
+    e = addMin(s, STEP_MINUTES);
+    eMin = toMin(e);
+    if (eMin <= sMin) {
+      // si no se puede (p.ej. inicio en MAX), retrocede inicio
+      s = addMin(e, -STEP_MINUTES);
+    }
+  }
+  return { s, e };
+};
+const addDaysYMD = (ymd, days) => {
+  if (!ymd) return '';
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return `${dt.getUTCFullYear()}-${fmt2(dt.getUTCMonth() + 1)}-${fmt2(dt.getUTCDate())}`;
+};
+
+// Dayjs helpers to map HH:MM strings to picker values and back
+const toDayjsFromHHMM = (hhmm) => {
+  if (!hhmm) return null;
+  const [h, m] = String(hhmm).split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return dayjs().hour(h).minute(m).second(0).millisecond(0);
+};
+const toHHMMFromDayjs = (d) => {
+  if (!d || !dayjs.isDayjs(d)) return '';
+  return `${fmt2(d.hour())}:${fmt2(d.minute())}`;
+};
+const minTimeDJ = () => dayjs().hour(7).minute(0).second(0).millisecond(0);
+const maxTimeDJ = () => dayjs().hour(16).minute(30).second(0).millisecond(0);
 
 export default function SolicitudPermiso() {
   const router = useRouter();
@@ -86,6 +150,12 @@ export default function SolicitudPermiso() {
     setHoyTxt({ dia, mes, anio, hora });
   }, []);
 
+  // YYYY-MM-DD de hoy para min en inputs de fecha
+  const todayYMD = useMemo(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${fmt2(n.getMonth() + 1)}-${fmt2(n.getDate())}`;
+  }, []);
+
   // UI helpers
   const handleChange = (e) => {
     const { name, value, type, checked, files } = e.target;
@@ -96,11 +166,20 @@ export default function SolicitudPermiso() {
   };
 
   const toggleFechaModo = () => setForm((p) => ({ ...p, esRango: !p.esRango }));
-  const toggleJornada = () => setForm((p) => ({
-    ...p,
-    jornada: p.jornada === "Media" ? "Completa" : "Media",
-    horaSalida: p.jornada === "Media" ? "" : p.horaSalida,
-  }));
+  const toggleJornada = () => setForm((p) => {
+    const next = { ...p };
+    next.jornada = p.jornada === 'Media' ? 'Completa' : 'Media';
+    if (next.jornada === 'Media') {
+      // set defaults if missing and ensure start < end
+      next.horaInicio = next.horaInicio || TIME_MIN;
+      next.horaFin = next.horaFin || addMin(next.horaInicio, STEP_MINUTES);
+      const { s, e } = normalizeTimes(next.horaInicio, next.horaFin);
+      next.horaInicio = s; next.horaFin = e;
+    } else {
+      next.horaSalida = '';
+    }
+    return next;
+  });
 
   // Reglas anti-errores y helpers
   const validate = () => {
@@ -117,16 +196,20 @@ export default function SolicitudPermiso() {
     if (start && start < in3Days.setHours(0,0,0,0)) errors.push("Debe solicitar con al menos 3 días de anticipación");
     if (start && start > in1Year) errors.push("La fecha no puede superar 1 año");
     if (end && end > in1Year) errors.push("La fecha fin no puede superar 1 año");
-    if (start && end && end < start) errors.push("La fecha fin no puede ser anterior al inicio");
+  if (form.esRango && start && end && end <= start) errors.push("La fecha fin debe ser posterior a la fecha inicio");
+  else if (start && end && end < start) errors.push("La fecha fin no puede ser anterior al inicio");
 
     // horas
     if (form.jornada === "Media") {
       if (!form.horaInicio || !form.horaFin) errors.push("Rango de horas requerido");
-      const [hiH, hiM] = (form.horaInicio || "00:00").split(":").map(Number);
-      const [hfH, hfM] = (form.horaFin || "00:00").split(":").map(Number);
-      const startMin = hiH * 60 + hiM;
-      const endMin = hfH * 60 + hfM;
-      if (endMin <= startMin) errors.push("La hora fin debe ser mayor a inicio");
+      const startMin = toMin(form.horaInicio || TIME_MIN);
+      const endMin = toMin(form.horaFin || TIME_MIN);
+      // dentro del rango permitido
+      if (startMin < toMin(TIME_MIN) || startMin > toMin(TIME_MAX) || endMin < toMin(TIME_MIN) || endMin > toMin(TIME_MAX)) {
+        errors.push(`Las horas deben estar entre ${TIME_MIN} y ${TIME_MAX}`);
+      }
+      // orden y diferencia mínima
+      if (endMin <= startMin) errors.push(`La hora fin debe ser posterior a inicio (mínimo ${STEP_MINUTES} min)`);
       if (endMin - startMin > 240) errors.push("Media jornada es hasta 4 horas");
     }
 
@@ -241,6 +324,7 @@ export default function SolicitudPermiso() {
       setLoading(false);
     }
   };
+  // No longer needed: timeOptions for select
 
   // UI
   const isProfesor = useMemo(() => {
@@ -290,13 +374,13 @@ export default function SolicitudPermiso() {
         <div style={{ display: "flex", gap: 12, alignItems: "end", marginBottom: 12 }}>
           <div>
             <label title="Selecciona la fecha de inicio del permiso">Fecha inicio <span style={{color:'red'}}>*</span>
-              <input type="date" name="fecha" value={form.fecha} onChange={handleChange} required style={{ display:'block' }} />
+              <input type="date" name="fecha" value={form.fecha} onChange={handleChange} required style={{ display:'block' }} min={todayYMD} />
             </label>
           </div>
-          {form.esRango && (
+      {form.esRango && (
             <div>
-              <label>Fecha fin <span style={{color:'red'}}>*</span>
-                <input type="date" name="fechaFin" value={form.fechaFin} onChange={handleChange} required style={{ display:'block' }} />
+      <label>Fecha fin <span style={{color:'red'}}>*</span>
+    <input type="date" name="fechaFin" value={form.fechaFin} onChange={handleChange} required style={{ display:'block' }} min={form.esRango && form.fecha ? addDaysYMD(form.fecha, 1) : (form.fecha || todayYMD)} />
               </label>
             </div>
           )}
@@ -313,18 +397,51 @@ export default function SolicitudPermiso() {
             </div>
           </div>
           {form.jornada === "Media" && (
-            <>
-              <div>
-                <label title="Hora de inicio">Hora inicio <span style={{color:'red'}}>*</span>
-                  <input type="time" name="horaInicio" value={form.horaInicio} onChange={handleChange} required style={{ display:'block' }} />
-                </label>
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <div style={{ display:'flex', gap:12 }}>
+                <div>
+                  <label title="Hora de inicio">Hora inicio <span style={{color:'red'}}>*</span></label>
+                  <TimePicker
+                    ampm
+                    minutesStep={STEP_MINUTES}
+                    value={toDayjsFromHHMM(form.horaInicio) || null}
+                    onChange={(newVal) => {
+                      setForm((prev) => {
+                        let nextStart = toHHMMFromDayjs(newVal);
+                        // clamp to min/max
+                        nextStart = clampTime(nextStart || TIME_MIN);
+                        // if end missing, set to start + step; else normalize to ensure end > start
+                        const currentEnd = prev.horaFin || addMin(nextStart, STEP_MINUTES);
+                        const { s, e } = normalizeTimes(nextStart, currentEnd);
+                        return { ...prev, horaInicio: s, horaFin: e };
+                      });
+                    }}
+                    minTime={minTimeDJ()}
+                    maxTime={maxTimeDJ()}
+                    slotProps={{ textField: { required: true, inputProps: { 'aria-label': 'Hora de inicio' } } }}
+                  />
+                </div>
+                <div>
+                  <label title="Hora de fin">Hora fin <span style={{color:'red'}}>*</span></label>
+                  <TimePicker
+                    ampm
+                    minutesStep={STEP_MINUTES}
+                    value={toDayjsFromHHMM(form.horaFin) || null}
+                    onChange={(newVal) => {
+                      setForm((prev) => {
+                        let nextEnd = toHHMMFromDayjs(newVal);
+                        nextEnd = clampTime(nextEnd || addMin(prev.horaInicio || TIME_MIN, STEP_MINUTES));
+                        const { s, e } = normalizeTimes(prev.horaInicio || TIME_MIN, nextEnd);
+                        return { ...prev, horaInicio: s, horaFin: e };
+                      });
+                    }}
+                    minTime={toDayjsFromHHMM(form.horaInicio || TIME_MIN) || minTimeDJ()}
+                    maxTime={maxTimeDJ()}
+                    slotProps={{ textField: { required: true, inputProps: { 'aria-label': 'Hora fin' } } }}
+                  />
+                </div>
               </div>
-              <div>
-                <label title="Hora de fin">Hora fin <span style={{color:'red'}}>*</span>
-                  <input type="time" name="horaFin" value={form.horaFin} onChange={handleChange} required style={{ display:'block' }} />
-                </label>
-              </div>
-            </>
+            </LocalizationProvider>
           )}
 
   </div>
@@ -384,9 +501,23 @@ export default function SolicitudPermiso() {
             <textarea name="observaciones" value={form.observaciones} onChange={handleChange} rows={3} style={{ width:'100%' }} placeholder="Opcional" />
           </label>
           {form.jornada === 'Media' && (
-            <label title="Hora de salida del centro educativo">Hora de salida
-              <input type="time" name="horaSalida" value={form.horaSalida} onChange={handleChange} style={{ display:'block' }} />
-            </label>
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <div>
+                <label title="Hora de salida del centro educativo">Hora de salida</label>
+                <TimePicker
+                  ampm
+                  minutesStep={STEP_MINUTES}
+                  value={toDayjsFromHHMM(form.horaSalida) || null}
+                  onChange={(newVal) => {
+                    const v = clampTime(toHHMMFromDayjs(newVal));
+                    setForm((p) => ({ ...p, horaSalida: v || '' }));
+                  }}
+                  minTime={minTimeDJ()}
+                  maxTime={maxTimeDJ()}
+                  slotProps={{ textField: { inputProps: { 'aria-label': 'Hora de salida' } } }}
+                />
+              </div>
+            </LocalizationProvider>
           )}
         </div>
 

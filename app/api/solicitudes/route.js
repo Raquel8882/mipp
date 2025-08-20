@@ -1,6 +1,14 @@
 import { requireRole } from '../../../lib/authHelpers';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 
+// Helpers de fecha (Costa Rica)
+const crYMD = (d = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(d)
+    .reduce((acc, p) => { if (p.type !== 'literal') acc[p.type] = p.value; return acc; }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
 export async function POST(req) {
   // any authenticated user can create a solicitud
   const user = await requireRole(req, 'normal_user');
@@ -24,6 +32,32 @@ export async function POST(req) {
     // validate minimal fields
     const required = ['fecha_inicio', 'fecha_fin', 'tipo_solicitud'];
     for (const f of required) if (!body[f]) return new Response(JSON.stringify({ error: `Campo requerido: ${f}` }), { status: 400 });
+
+    // Reglas de fecha: no permitir fechas menores a hoy (CR) y fin >= inicio
+    // Usa reloj de prueba de la BD (get_today_cr) si existe; fallback a crYMD local
+    let todayCR = null;
+    try {
+      const { data: todayData } = await supabaseAdmin.rpc('get_today_cr');
+      if (todayData) todayCR = String(todayData);
+    } catch {}
+    if (!todayCR) todayCR = crYMD();
+    const fi = String(body.fecha_inicio);
+    const ff = String(body.fecha_fin);
+    if (fi < todayCR) {
+      return new Response(JSON.stringify({ error: 'fecha_inicio no puede ser menor a hoy' }), { status: 400 });
+    }
+    if (ff < todayCR) {
+      return new Response(JSON.stringify({ error: 'fecha_fin no puede ser menor a hoy' }), { status: 400 });
+    }
+    if (body.es_rango) {
+      if (ff <= fi) {
+        return new Response(JSON.stringify({ error: 'En rango, fecha_fin debe ser posterior a fecha_inicio' }), { status: 400 });
+      }
+    } else {
+      if (ff < fi) {
+        return new Response(JSON.stringify({ error: 'fecha_fin no puede ser anterior a fecha_inicio' }), { status: 400 });
+      }
+    }
 
     // attach user from session
   const cookie = req.cookies.get('session_token');

@@ -6,14 +6,41 @@ import { useRouter } from 'next/navigation';
 import { supabase } from "../../lib/supabaseClient";
 import useCurrentUser from "../../lib/useCurrentUser";
 import LoadingOverlay from '../../components/LoadingOverlay';
+import dayjs from 'dayjs';
+import { LocalizationProvider, TimePicker } from '@mui/x-date-pickers';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 
 const fmt2 = (n) => String(n).padStart(2, "0");
-const todayParts = () => {
-  const now = new Date();
-  return {
-    date: `${now.getFullYear()}-${fmt2(now.getMonth()+1)}-${fmt2(now.getDate())}`,
-    time: `${fmt2(now.getHours())}:${fmt2(now.getMinutes())}`,
-  };
+
+// Utilidades de fecha para Costa Rica
+const crYMD = () => {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(new Date())
+    .reduce((acc, p) => { if (p.type !== 'literal') acc[p.type] = p.value; return acc; }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+const shiftYMD = (ymd, days) => {
+  const [y, m, d] = ymd.split('-').map(n => parseInt(n, 10));
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+};
+// día de la semana para un YMD (0=Dom..6=Sáb) usando UTC para consistencia
+const dayOfWeek = (ymd) => {
+  const [y, m, d] = ymd.split('-').map(n => parseInt(n, 10));
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCDay();
+};
+// Obtiene los N días hábiles anteriores a hoy (CR), excluyendo sábados y domingos
+const previousBusinessDaysCR = (todayYMD, count = 2) => {
+  const res = [];
+  let cur = todayYMD;
+  while (res.length < count) {
+    cur = shiftYMD(cur, -1);
+    const dow = dayOfWeek(cur);
+    if (dow >= 1 && dow <= 5) res.push(cur);
+  }
+  return res; // más reciente primero
 };
 
 export default function FormJustificacion() {
@@ -40,11 +67,24 @@ export default function FormJustificacion() {
     tipoJustificacion: "Cita medica personal",
     familiar: "",
     observaciones: "",
-    adjunto: null,
-    // fecha/hora en que se justifica
-    justFecha: todayParts().date,
-    justHora: todayParts().time,
+  adjunto: null,
   });
+
+  // Fechas permitidas (CR): dos días hábiles anteriores (ignora fines de semana)
+  // Usa reloj de la BD (get_today_cr) para respetar offset de pruebas; fallback a crYMD local
+  const [todayCR, setTodayCR] = useState(crYMD());
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: todayData, error } = await supabase.rpc('get_today_cr');
+        if (!error && todayData) setTodayCR(String(todayData));
+      } catch {}
+    })();
+  }, []);
+  const prevBiz = useMemo(() => previousBusinessDaysCR(todayCR, 2), [todayCR]);
+  const minAllowed = useMemo(() => (prevBiz.slice().sort()[0] || ''), [prevBiz]);
+  const maxAllowed = useMemo(() => (prevBiz.slice().sort()[1] || prevBiz[0] || ''), [prevBiz]);
+  const allowedSet = useMemo(() => new Set(prevBiz), [prevBiz]);
 
   useEffect(() => {
     if (!authLoading && !currentUser) {
@@ -103,6 +143,17 @@ export default function FormJustificacion() {
     }));
   };
 
+  // HH:MM helpers for picker values
+  const toHHMM = (d) => (d && dayjs.isDayjs(d)) ? `${fmt2(d.hour())}:${fmt2(d.minute())}` : '';
+  const fromHHMM = (s) => {
+    if (!s) return null;
+    const [h, m] = String(s).split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return null;
+    return dayjs().hour(h).minute(m).second(0).millisecond(0);
+  };
+  const minTimeDJ = () => dayjs().hour(7).minute(0).second(0).millisecond(0);
+  const maxTimeDJ = () => dayjs().hour(16).minute(30).second(0).millisecond(0);
+
   const toggleFechaModo = () => setForm((p) => ({ ...p, esRango: !p.esRango }));
   const toggleJornada = () => setForm((p) => ({
     ...p,
@@ -134,6 +185,14 @@ export default function FormJustificacion() {
     }
     const s = misSolicitudes.find(r => String(r.id) === String(val));
     if (!s) return;
+    // Última fecha debe corresponder a uno de los dos días hábiles anteriores (CR)
+    const lastDateStr = s.es_rango ? (s.fecha_fin || s.fecha_inicio) : s.fecha_inicio;
+    const isAllowedCRDay = allowedSet.has(String(lastDateStr));
+    if (!isAllowedCRDay){
+      alert('Esta solicitud está fuera de plazo (no corresponde a los dos días hábiles anteriores). No puede justificarse.');
+      setSolicitudSel('');
+      return;
+    }
     setForm((p) => ({
       ...p,
       tipoGeneral: s.tipo_general || p.tipoGeneral,
@@ -159,11 +218,16 @@ export default function FormJustificacion() {
     const errors = [];
     if (!form.fecha) errors.push('Selecciona la fecha inicio que justificas');
     if (form.esRango && !form.fechaFin) errors.push('Selecciona la fecha fin que justificas');
+    // Rango válido: fin >= inicio
+    if (form.esRango && form.fecha && form.fechaFin) {
+      if (new Date(form.fecha) > new Date(form.fechaFin)) errors.push('La fecha fin no puede ser anterior a la fecha inicio');
+    }
+  // Solo dos días hábiles anteriores (CR)
+  if (form.fecha && !allowedSet.has(form.fecha)) errors.push('La fecha inicio debe ser uno de los dos días hábiles anteriores (zona horaria Costa Rica)');
+  if (form.esRango && form.fechaFin && !allowedSet.has(form.fechaFin)) errors.push('La fecha fin debe ser uno de los dos días hábiles anteriores (zona horaria Costa Rica)');
     if (form.jornada === 'Media') {
       if (!form.horaInicio || !form.horaFin) errors.push('Rango de horas requerido para media jornada');
     }
-    if (!form.justFecha) errors.push('Fecha en que se justifica requerida');
-    if (!form.justHora) errors.push('Hora en que se justifica requerida');
     if (['Cita medica personal','Asistencia a convocatoria','Acompañar a cita familiar'].includes(form.tipoJustificacion)) {
       if (!form.adjunto) errors.push('Debes adjuntar un documento de respaldo');
     }
@@ -218,8 +282,6 @@ export default function FormJustificacion() {
       cantidad: form.cantidad ? Number(form.cantidad) : null,
       unidad: form.cantidad ? (form.unidad === 'lecciones' ? 'lecciones' : 'horas') : null,
   hora_salida: form.jornada === 'Media' ? (form.horaSalida || null) : null,
-      justificacion_fecha: form.justFecha,
-      justificacion_hora: form.justHora,
       observaciones: form.observaciones || null,
       familiar: form.tipoJustificacion === 'Acompañar a cita familiar' ? form.familiar || null : null,
       adjunto_url, adjunto_path, adjunto_mime,
@@ -265,7 +327,7 @@ export default function FormJustificacion() {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} style={{ border:'1px solid #ddd', padding:16, borderRadius:8 }}>
+  <form onSubmit={handleSubmit} style={{ border:'1px solid #ddd', padding:16, borderRadius:8 }}>
         {/* Con o sin solicitud */}
         <div style={{ marginBottom:12 }}>
           <label>¿Justifica una solicitud existente?</label>
@@ -278,9 +340,14 @@ export default function FormJustificacion() {
               <label>Selecciona la solicitud
                 <select value={solicitudSel} onChange={handleSelectSolicitud} style={{ display:'block', marginTop:6 }}>
                   <option value="">-- Selecciona --</option>
-                  {misSolicitudes.map(s => (
-                    <option key={s.id} value={s.id}>#{s.id} • {s.fecha_inicio}{s.es_rango ? ` → ${s.fecha_fin}` : ''} • {s.jornada}{s.hora_inicio ? ` (${s.hora_inicio}${s.hora_fin ? ` - ${s.hora_fin}` : ''})` : ''}</option>
-                  ))}
+                  {misSolicitudes.map(s => {
+                    const lastDateStr = s.es_rango ? (s.fecha_fin || s.fecha_inicio) : s.fecha_inicio;
+                    const outOfWindow = !allowedSet.has(String(lastDateStr));
+                    const label = `#${s.id} • ${s.fecha_inicio}${s.es_rango ? ` → ${s.fecha_fin}` : ''} • ${s.jornada}${s.hora_inicio ? ` (${s.hora_inicio}${s.hora_fin ? ` - ${s.hora_fin}` : ''})` : ''}${outOfWindow ? ' • (fuera de plazo)' : ''}`;
+                    return (
+                      <option key={s.id} value={s.id} disabled={outOfWindow}>{label}</option>
+                    );
+                  })}
                 </select>
               </label>
               <small>Al seleccionar, se autorellenan los campos.</small>
@@ -304,13 +371,13 @@ export default function FormJustificacion() {
         <div style={{ display:'flex', gap:12, alignItems:'end', marginBottom:12 }}>
           <div>
             <label>Fecha inicio <span style={{color:'red'}}>*</span>
-              <input type="date" name="fecha" value={form.fecha} onChange={handleChange} required style={{ display:'block' }} />
+              <input type="date" name="fecha" value={form.fecha} onChange={handleChange} required style={{ display:'block' }} min={minAllowed} max={maxAllowed} />
             </label>
           </div>
           {form.esRango && (
             <div>
               <label>Fecha fin <span style={{color:'red'}}>*</span>
-                <input type="date" name="fechaFin" value={form.fechaFin} onChange={handleChange} required style={{ display:'block' }} />
+                <input type="date" name="fechaFin" value={form.fechaFin} onChange={handleChange} required style={{ display:'block' }} min={form.fecha || minAllowed} max={maxAllowed} />
               </label>
             </div>
           )}
@@ -327,25 +394,45 @@ export default function FormJustificacion() {
             </div>
           </div>
           {form.jornada === 'Media' && (
-            <>
-              <div>
-                <label>Hora inicio <span style={{color:'red'}}>*</span>
-                  <input type="time" name="horaInicio" value={form.horaInicio} onChange={handleChange} required style={{ display:'block' }} />
-                </label>
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <div style={{ display:'flex', gap:12 }}>
+                <div>
+                  <label>Hora inicio <span style={{color:'red'}}>*</span></label>
+                  <TimePicker
+                    ampm
+                    minutesStep={5}
+                    value={fromHHMM(form.horaInicio)}
+                    onChange={(v) => setForm((p) => ({ ...p, horaInicio: toHHMM(v) }))}
+                    minTime={minTimeDJ()}
+                    maxTime={maxTimeDJ()}
+                    slotProps={{ textField: { required: true } }}
+                  />
+                </div>
+                <div>
+                  <label>Hora fin <span style={{color:'red'}}>*</span></label>
+                  <TimePicker
+                    ampm
+                    minutesStep={5}
+                    value={fromHHMM(form.horaFin)}
+                    onChange={(v) => setForm((p) => ({ ...p, horaFin: toHHMM(v) }))}
+                    minTime={fromHHMM(form.horaInicio) || minTimeDJ()}
+                    maxTime={maxTimeDJ()}
+                    slotProps={{ textField: { required: true } }}
+                  />
+                </div>
+                <div>
+                  <label>Hora de salida</label>
+                  <TimePicker
+                    ampm
+                    minutesStep={5}
+                    value={fromHHMM(form.horaSalida)}
+                    onChange={(v) => setForm((p) => ({ ...p, horaSalida: toHHMM(v) }))}
+                    minTime={minTimeDJ()}
+                    maxTime={maxTimeDJ()}
+                  />
+                </div>
               </div>
-              <div>
-                <label>Hora fin <span style={{color:'red'}}>*</span>
-                  <input type="time" name="horaFin" value={form.horaFin} onChange={handleChange} required style={{ display:'block' }} />
-                </label>
-              </div>
-            </>
-          )}
-          {form.jornada === 'Media' && (
-            <div>
-              <label>Hora de salida
-                <input type="time" name="horaSalida" value={form.horaSalida} onChange={handleChange} style={{ display:'block' }} />
-              </label>
-            </div>
+            </LocalizationProvider>
           )}
         </div>
 
@@ -404,14 +491,20 @@ export default function FormJustificacion() {
           </label>
         </div>
 
-        {/* Fecha/hora de justificación */}
-        <div style={{ display:'flex', gap:12, marginBottom:12 }}>
-          <label>Fecha en que se justifica <span style={{color:'red'}}>*</span>
-            <input type="date" name="justFecha" value={form.justFecha} onChange={handleChange} required style={{ display:'block' }} />
-          </label>
-          <label>Hora en que se justifica <span style={{color:'red'}}>*</span>
-            <input type="time" name="justHora" value={form.justHora} onChange={handleChange} required style={{ display:'block' }} />
-          </label>
+        {/* Texto de presentación (igual que permisos) */}
+        <div style={{ background:'#f7f7f7', padding:10, borderRadius:6, marginBottom:12 }}>
+          <p>
+            {(() => {
+              const now = new Date();
+              const hora = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+              const dia = String(now.getDate()).padStart(2,'0');
+              const mes = String(now.getMonth()+1).padStart(2,'0');
+              const anio = now.getFullYear();
+              return (
+                <>Presento la solicitud a las <strong>{hora}</strong> del día <strong>{dia}</strong> del mes <strong>{mes}</strong> del año <strong>{anio}</strong>.</>
+              );
+            })()}
+          </p>
         </div>
 
         {/* Acciones */}
