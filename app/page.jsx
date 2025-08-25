@@ -1,7 +1,8 @@
+import styles from "../../styles/home.module.css"
 
-import { redirect } from 'next/navigation'
-
-export default function Page() {
-	redirect('/home')
+const HomePage = () => {
+  return <div className={styles.container}>{/* rest of code here */}</div>
 }
+
+export default HomePage
 

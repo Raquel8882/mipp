@@ -1,22 +1,10 @@
-"use client";
-
-import React from 'react';
-
-export default function LoadingOverlay({ show = false, text = 'Cargando…' }) {
-  if (!show) return null;
+export default function LoadingOverlay() {
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(255,255,255,0.75)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
-    }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-        <div style={{
-          width: 36, height: 36, border: '3px solid #93c5fd', borderTopColor: '#1d4ed8',
-          borderRadius: '50%', animation: 'spin 1s linear infinite'
-        }} />
-        <div style={{ color: '#1f2937', fontWeight: 600 }}>{text}</div>
-        <style>{`@keyframes spin { from {transform: rotate(0)} to {transform: rotate(360deg)} }`}</style>
+    <div className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
+      <div className="text-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+        <p className="text-gray-600 text-lg">Cargando...</p>
       </div>
     </div>
-  );
+  )
 }
